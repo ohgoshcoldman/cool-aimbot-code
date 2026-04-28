@@ -62,16 +62,20 @@ local function getTargetUnderCursor()
 			local humanoid = p.Character:FindFirstChild("Humanoid")
 			if root and humanoid and humanoid.Health > 0 then
 
-				local worldDist = (root.Position - myRoot.Position).Magnitude
-				if worldDist <= LOCK_RANGE then
+				-- Only target players on a different team
+				if p.Team ~= player.Team then
 
-					local screenPos, onScreen = camera:WorldToScreenPoint(root.Position)
-					if onScreen then
-						local screenVec = Vector2.new(screenPos.X, screenPos.Y)
-						local pixelDist = (screenVec - mousePos).Magnitude
-						if pixelDist <= CURSOR_PIXELS and pixelDist < bestDist then
-							bestDist = pixelDist
-							best = p
+					local worldDist = (root.Position - myRoot.Position).Magnitude
+					if worldDist <= LOCK_RANGE then
+
+						local screenPos, onScreen = camera:WorldToScreenPoint(root.Position)
+						if onScreen then
+							local screenVec = Vector2.new(screenPos.X, screenPos.Y)
+							local pixelDist = (screenVec - mousePos).Magnitude
+							if pixelDist <= CURSOR_PIXELS and pixelDist < bestDist then
+								bestDist = pixelDist
+								best = p
+							end
 						end
 					end
 				end
