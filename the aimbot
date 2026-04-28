@@ -1,0 +1,155 @@
+-- LocalScript (place inside StarterPlayerScripts)
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+
+-- Settings
+local LOCK_RANGE = 500
+local CURSOR_PIXELS = 150
+local LOCK_KEY = Enum.KeyCode.E
+
+-- State
+local locked = false
+local lockedTarget = nil
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "LockOnGui"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = player.PlayerGui
+
+local circleFrame = Instance.new("Frame")
+circleFrame.Size = UDim2.new(0, 80, 0, 80)
+circleFrame.BackgroundTransparency = 1
+circleFrame.BorderSizePixel = 0
+circleFrame.Visible = false
+circleFrame.Parent = screenGui
+
+local circleStroke = Instance.new("UIStroke")
+circleStroke.Color = Color3.fromRGB(255, 255, 255)
+circleStroke.Thickness = 1.5
+circleStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+circleStroke.Parent = circleFrame
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(1, 0)
+uiCorner.Parent = circleFrame
+
+-- Helper: get character root
+local function getRoot(character)
+	return character and character:FindFirstChild("HumanoidRootPart")
+end
+
+-- Find player whose root is closest to cursor in screen space
+local function getTargetUnderCursor()
+	local myChar = player.Character
+	local myRoot = getRoot(myChar)
+	if not myRoot then return nil end
+
+	local mousePos = UserInputService:GetMouseLocation()
+
+	local best = nil
+	local bestDist = math.huge
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			local root = getRoot(p.Character)
+			local humanoid = p.Character:FindFirstChild("Humanoid")
+			if root and humanoid and humanoid.Health > 0 then
+
+				local worldDist = (root.Position - myRoot.Position).Magnitude
+				if worldDist <= LOCK_RANGE then
+
+					local screenPos, onScreen = camera:WorldToScreenPoint(root.Position)
+					if onScreen then
+						local screenVec = Vector2.new(screenPos.X, screenPos.Y)
+						local pixelDist = (screenVec - mousePos).Magnitude
+						if pixelDist <= CURSOR_PIXELS and pixelDist < bestDist then
+							bestDist = pixelDist
+							best = p
+						end
+					end
+				end
+			end
+		end
+	end
+
+	return best
+end
+
+-- Reset lock state on death/respawn but keep script alive
+local function onCharacterAdded(character)
+	locked = false
+	lockedTarget = nil
+	circleFrame.Visible = false
+
+	character:WaitForChild("HumanoidRootPart")
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
+
+if player.Character then
+	onCharacterAdded(player.Character)
+end
+
+-- Hold E to lock, release to unlock
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == LOCK_KEY then
+		local target = getTargetUnderCursor()
+		if target then
+			locked = true
+			lockedTarget = target
+		end
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.KeyCode == LOCK_KEY then
+		locked = false
+		lockedTarget = nil
+		circleFrame.Visible = false
+	end
+end)
+
+-- Each frame
+RunService.RenderStepped:Connect(function()
+	local myChar = player.Character
+	local myRoot = getRoot(myChar)
+
+	if locked and lockedTarget then
+		local targetChar = lockedTarget.Character
+		local targetRoot = getRoot(targetChar)
+		local humanoid = targetChar and targetChar:FindFirstChild("Humanoid")
+
+		if not targetRoot or not humanoid or humanoid.Health <= 0 then
+			locked = false
+			lockedTarget = nil
+			circleFrame.Visible = false
+			return
+		end
+
+		if myRoot then
+			local dist = (targetRoot.Position - myRoot.Position).Magnitude
+			if dist > LOCK_RANGE + 5 then
+				locked = false
+				lockedTarget = nil
+				circleFrame.Visible = false
+				return
+			end
+
+			local targetPos = targetRoot.Position + Vector3.new(0, 1.5, 0)
+			camera.CFrame = CFrame.new(camera.CFrame.Position, targetPos)
+		end
+
+		local mousePos = UserInputService:GetMouseLocation()
+		local half = 40
+		circleFrame.Visible = true
+		circleFrame.Position = UDim2.new(0, mousePos.X - half, 0, mousePos.Y - half)
+	end
+end)
